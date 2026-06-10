@@ -5,10 +5,10 @@ from __future__ import annotations
 import os
 import sys
 
-from . import core
-from . import deploy
-from . import profiles
-from . import skills
+from sm_cli import core
+from sm_cli import deploy
+from sm_cli import profiles
+from sm_cli import skills
 
 
 # ── use / unuse ─────────────────────────────────────────────────────────

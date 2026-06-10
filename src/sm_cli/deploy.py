@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from . import core
+from sm_cli import core
 
 
 def _is_managed(link: Path) -> bool:

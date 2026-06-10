@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 
-from . import core
+from sm_cli import core
 
 
 def add(

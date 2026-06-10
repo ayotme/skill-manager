@@ -10,7 +10,7 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-from . import core
+from sm_cli import core
 
 
 def add(source: str, skill: str | None = None, list_only: bool = False) -> None:
