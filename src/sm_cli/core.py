@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-from importlib import resources
 from pathlib import Path
 from typing import Any
 
@@ -49,13 +48,33 @@ def save_json(path: Path, data: dict[str, Any]) -> None:
 
 # ── agents ───────────────────────────────────────────────────────────────
 
+BUILTIN_AGENTS: dict[str, dict[str, str]] = {
+    "claude": {
+        "command": "claude",
+        "global": "~/.claude/skills",
+        "project": ".claude/skills",
+    },
+    "codex": {
+        "command": "codex",
+        "global": "~/.codex/skills",
+        "project": ".codex/skills",
+    },
+    "pi": {
+        "command": "pi",
+        "global": "~/.pi/agent/skills",
+        "project": ".pi/skills",
+    },
+    "cursor": {
+        "command": "cursor",
+        "global": "~/.cursor/skills",
+        "project": ".cursor/skills",
+    },
+}
+
 
 def load_agents() -> dict[str, Any]:
     """Merge built-in + user agents. User overrides take precedence."""
-    ref = resources.files("sm_cli").joinpath("agents.json")
-    with resources.as_file(ref) as p:
-        with open(p) as f:
-            agents = json.load(f)
+    agents: dict[str, Any] = {k: dict(v) for k, v in BUILTIN_AGENTS.items()}
     agents.update(load_json(SM_HOME / "agents.json"))
     return agents
 
