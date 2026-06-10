@@ -108,6 +108,15 @@ def update(name: str | None = None) -> None:
     print(f"\n✓ Updated {updated}/{len(repo_names)} repo(s)")
 
 
+def _skill_source(skill_path: Path) -> str:
+    """Return 'git' or 'local' based on where the symlink points."""
+    if skill_path.is_symlink():
+        target = os.readlink(skill_path)
+        if target.startswith(str(core.repos_dir())):
+            return "git"
+    return "local"
+
+
 def list_installed() -> None:
     core.ensure_initialized()
     names = core.list_skills()
@@ -116,16 +125,12 @@ def list_installed() -> None:
         return
     for name in names:
         skill_path = core.skills_dir() / name
-        if skill_path.is_symlink():
-            target = os.readlink(skill_path)
-            repos_str = str(core.repos_dir()) + "/"
-            if target.startswith(repos_str):
-                repo = target[len(repos_str):].split("/")[0]
-                print(f"  {name} (git: {repo})")
-            else:
-                print(f"  {name} (local)")
-        else:
-            print(f"  {name}")
+        src = _skill_source(skill_path)
+        desc = _read_description(skill_path / "SKILL.md")
+        line = f"  {name} ({src})"
+        if desc:
+            line += f"  — {desc}"
+        print(line)
 
 
 # ── internal ─────────────────────────────────────────────────────────────
