@@ -7,6 +7,7 @@ import sys
 
 from sm_cli import core
 from sm_cli import deploy
+from sm_cli import display
 from sm_cli import profiles
 from sm_cli import skills
 
@@ -37,12 +38,12 @@ def unuse_profile(profile_name: str, agent: str, project: bool = False) -> None:
 
 def show_status() -> None:
     core.ensure_initialized()
-    agents = core.agent_names()
-    sk = core.list_skills()
-    pr = core.list_profiles()
-    print(f"Skill Manager  {core.SM_HOME}")
-    print(f"Agents: {', '.join(agents)}")
-    print(f"Skills: {len(sk)}   Profiles: {len(pr)}")
+    display.status(
+        home=str(core.SM_HOME),
+        agents=core.agent_names(),
+        n_skills=len(core.list_skills()),
+        n_profiles=len(core.list_profiles()),
+    )
 
 
 # ── help ─────────────────────────────────────────────────────────────────

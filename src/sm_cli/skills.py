@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from sm_cli import core
+from sm_cli import display
 
 
 def add(source: str, skill: str | None = None, list_only: bool = False) -> None:
@@ -120,17 +121,15 @@ def _skill_source(skill_path: Path) -> str:
 def list_installed() -> None:
     core.ensure_initialized()
     names = core.list_skills()
-    if not names:
-        print("No skills installed.")
-        return
+    items = []
     for name in names:
         skill_path = core.skills_dir() / name
-        src = _skill_source(skill_path)
-        desc = _read_description(skill_path / "SKILL.md")
-        line = f"  {name} ({src})"
-        if desc:
-            line += f"  — {desc}"
-        print(line)
+        items.append({
+            "name": name,
+            "source": _skill_source(skill_path),
+            "description": _read_description(skill_path / "SKILL.md"),
+        })
+    display.skills_list(items)
 
 
 # ── internal ─────────────────────────────────────────────────────────────
@@ -164,13 +163,11 @@ def _add_git(url: str, skill: str | None = None, list_only: bool = False) -> Non
 
     # --list: just show and exit
     if list_only:
-        print(f"Skills in {url} ({len(all_skills)}):\n")
-        for skill_name, skill_path in all_skills:
-            desc = _read_description(skill_path / "SKILL.md")
-            line = f"  {skill_name}"
-            if desc:
-                line += f"  — {desc}"
-            print(line)
+        items = [
+            {"name": n, "description": _read_description(p / "SKILL.md")}
+            for n, p in all_skills
+        ]
+        display.repo_preview(url, items)
         shutil.rmtree(repo_path)
         return
 

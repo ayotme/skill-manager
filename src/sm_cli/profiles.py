@@ -6,6 +6,7 @@ import os
 import subprocess
 
 from sm_cli import core
+from sm_cli import display
 
 
 def add(
@@ -48,14 +49,12 @@ def edit(name: str) -> None:
 def list_all() -> None:
     core.ensure_initialized()
     names = core.list_profiles()
-    if not names:
-        print("No profiles.")
-        return
+    items = []
     for name in names:
         p = core.load_profile(name)
-        skills = p.get("skills", [])
-        desc = p.get("description", "")
-        print(f"  {name}:")
-        if desc:
-            print(f"    description: {desc}")
-        print(f"    skills: {', '.join(skills) if skills else '(none)'}")
+        items.append({
+            "name": name,
+            "description": p.get("description", ""),
+            "skills": p.get("skills", []),
+        })
+    display.profiles_list(items)
