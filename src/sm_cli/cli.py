@@ -1,4 +1,4 @@
-"""sm — Agent Skill Manager. Entry point and dispatch."""
+"""sm — Skill Manager. Entry point and dispatch."""
 
 from __future__ import annotations
 
@@ -41,49 +41,44 @@ def show_status() -> None:
     display.status(
         home=str(core.SM_HOME),
         agents=core.agent_names(),
-        n_skills=len(core.list_skills()),
-        n_profiles=len(core.list_profiles()),
+        skill_names=core.list_skills(),
+        profile_names=core.list_profiles(),
     )
 
 
 # ── help ─────────────────────────────────────────────────────────────────
 
 HELP = """\
-sm — Agent Skill Manager
+sm — Skill Manager
 
-Usage:
-  sm status                              Show current status
+Skills (first-class):
+  sm add <owner/repo|url|path>           Install skill(s)
+    [-s pdf,docx] [-l]
+  sm ls                                  List installed skills
+  sm rm [name]                           Remove a skill (omit for all)
+  sm update [name]                       Update skill(s) from source
 
-Profile management:
-  sm add <name> [--skills a,b,c]         Create a profile
+Profiles:
+  sm profile add <name> --skills ...     Create a profile
     [--desc text] [--force]
-  sm list                                List all profiles
-  sm remove <name>                       Remove a profile
-  sm edit <name>                         Edit profile in $EDITOR
-
-Skills:
-  sm skills add <url|path|owner/repo>    Install skill(s)
-    [-s, --skill name] [-l, --list]
-  sm skills list                         List installed skills
-  sm skills remove <name>                Remove a skill
-  sm skills update [name]                Update skill(s) from source
+  sm profile ls                          List profiles
+  sm profile edit <name>                 Edit in $EDITOR
+  sm profile rm <name>                   Remove a profile
 
 Deploy:
-  sm use <profile> <agent>               Deploy + launch agent (global)
-  sm use <profile> <agent> -p            Deploy + launch agent (project-local)
-  sm unuse <profile> <agent>             Remove deployed skill links (global)
-  sm unuse <profile> <agent> -p          Remove deployed skill links (project-local)
+  sm use <profile> <agent>               Deploy + launch (global)
+  sm use <profile> <agent> -p            Deploy + launch (project-local)
+  sm unuse <profile> <agent>             Remove deployment
 
 Agents: claude, codex, pi, cursor
   (configurable in ~/.sm/agents.json)
 
 Examples:
-  sm skills add anthropics/skills              # short format
-  sm skills add anthropics/skills -l           # list before installing
-  sm skills add anthropics/skills -s pdf       # install specific skill
-  sm add work --skills pdf,docx,deep-research
+  sm add anthropics/skills                     # install all
+  sm add anthropics/skills -l                  # preview
+  sm add anthropics/skills -s pdf,docx,pptx    # specific skills
+  sm profile add work --skills pdf,docx --desc "Daily work"
   sm use work claude
-  sm use work claude -p
 """
 
 
@@ -100,20 +95,17 @@ def main() -> None:
 
     if cmd == "status":
         show_status()
-    elif cmd == "skills":
-        _dispatch_skills(args[1:])
     elif cmd == "add":
-        _dispatch_add(args[1:])
-    elif cmd == "list":
-        profiles.list_all()
-    elif cmd == "remove":
-        if len(args) < 2:
-            raise SystemExit("Usage: sm remove <profile>")
-        profiles.remove(args[1])
-    elif cmd == "edit":
-        if len(args) < 2:
-            raise SystemExit("Usage: sm edit <profile>")
-        profiles.edit(args[1])
+        _dispatch_skill_add(args[1:])
+    elif cmd in ("ls", "list"):
+        skills.list_installed()
+    elif cmd in ("rm", "remove"):
+        name = args[1] if len(args) > 1 else None
+        skills.remove(name)
+    elif cmd == "update":
+        skills.update(args[1] if len(args) > 1 else None)
+    elif cmd == "profile":
+        _dispatch_profile(args[1:])
     elif cmd == "use":
         _dispatch_use(args[1:], deploy_mode=True)
     elif cmd == "unuse":
@@ -124,43 +116,55 @@ def main() -> None:
         raise SystemExit(1)
 
 
-# ── dispatch ─────────────────────────────────────────────────────────────
+# ── dispatch: skills ─────────────────────────────────────────────────────
 
 
-def _dispatch_skills(args: list[str]) -> None:
-    sub = args[0] if args else "list"
-    if sub == "list":
-        skills.list_installed()
-    elif sub == "add":
-        if len(args) < 2:
-            raise SystemExit("Usage: sm skills add <url|path|owner/repo> [-s name] [-l]")
-        source = args[1]
-        sk = None
-        list_only = False
-        i = 2
-        while i < len(args):
-            if args[i] in ("-s", "--skill") and i + 1 < len(args):
-                sk = args[i + 1]
-                i += 2
-            elif args[i] in ("-l", "--list"):
-                list_only = True
-                i += 1
-            else:
-                i += 1
-        skills.add(source, sk, list_only)
-    elif sub == "remove":
-        if len(args) < 2:
-            raise SystemExit("Usage: sm skills remove <name>")
-        skills.remove(args[1])
-    elif sub == "update":
-        skills.update(args[1] if len(args) > 1 else None)
-    else:
-        raise SystemExit(f"Unknown: sm skills {sub}")
-
-
-def _dispatch_add(args: list[str]) -> None:
+def _dispatch_skill_add(args: list[str]) -> None:
     if not args:
-        raise SystemExit("Usage: sm add <name> [--skills a,b,c] [--desc text] [--force]")
+        raise SystemExit("Usage: sm add <owner/repo|url|path> [-s name] [-l]")
+    source = args[0]
+    skills_list: list[str] = []
+    list_only = False
+    i = 1
+    while i < len(args):
+        if args[i] in ("-s", "--skill") and i + 1 < len(args):
+            skills_list.extend(
+                s.strip() for s in args[i + 1].split(",") if s.strip()
+            )
+            i += 2
+        elif args[i] in ("-l", "--list"):
+            list_only = True
+            i += 1
+        else:
+            i += 1
+    sk = skills_list if skills_list else None
+    skills.add(source, sk, list_only)
+
+
+# ── dispatch: profile ────────────────────────────────────────────────────
+
+
+def _dispatch_profile(args: list[str]) -> None:
+    sub = args[0] if args else "ls"
+    if sub in ("ls", "list"):
+        profiles.list_all()
+    elif sub == "add":
+        _dispatch_profile_add(args[1:])
+    elif sub in ("rm", "remove"):
+        if len(args) < 2:
+            raise SystemExit("Usage: sm profile rm <name>")
+        profiles.remove(args[1])
+    elif sub == "edit":
+        if len(args) < 2:
+            raise SystemExit("Usage: sm profile edit <name>")
+        profiles.edit(args[1])
+    else:
+        raise SystemExit(f"Unknown: sm profile {sub}")
+
+
+def _dispatch_profile_add(args: list[str]) -> None:
+    if not args:
+        raise SystemExit("Usage: sm profile add <name> --skills ... [--desc text] [--force]")
     name = args[0]
     sk: list[str] | None = None
     desc = ""
@@ -179,6 +183,9 @@ def _dispatch_add(args: list[str]) -> None:
         else:
             i += 1
     profiles.add(name, sk, desc, force)
+
+
+# ── dispatch: use / unuse ────────────────────────────────────────────────
 
 
 def _dispatch_use(args: list[str], *, deploy_mode: bool) -> None:

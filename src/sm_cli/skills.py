@@ -14,7 +14,7 @@ from sm_cli import core
 from sm_cli import display
 
 
-def add(source: str, skill: str | None = None, list_only: bool = False) -> None:
+def add(source: str, skill: str | list[str] | None = None, list_only: bool = False) -> None:
     core.ensure_initialized()
     # expand owner/repo short format
     if "/" in source and not source.startswith(("https://", "git@", "git+", "/")):
@@ -29,16 +29,30 @@ def add(source: str, skill: str | None = None, list_only: bool = False) -> None:
         raise SystemExit(f"Unknown source: {source}")
 
 
-def remove(name: str) -> None:
+def remove(name: str | None = None) -> None:
     core.ensure_initialized()
-    p = core.skills_dir() / name
-    if not p.exists():
-        raise SystemExit(f"'{name}' not found.")
-    if p.is_symlink():
-        p.unlink()
+    d = core.skills_dir()
+    if name:
+        p = d / name
+        if not p.exists():
+            raise SystemExit(f"'{name}' not found.")
+        if p.is_symlink():
+            p.unlink()
+        else:
+            shutil.rmtree(p)
+        print(f"✓ '{name}' removed.")
     else:
-        shutil.rmtree(p)
-    print(f"✓ '{name}' removed.")
+        names = core.list_skills()
+        if not names:
+            print("No skills installed.")
+            return
+        for n in names:
+            p = d / n
+            if p.is_symlink():
+                p.unlink()
+            else:
+                shutil.rmtree(p)
+        print(f"✓ Removed all {len(names)} skill(s).")
 
 
 def update(name: str | None = None) -> None:
@@ -71,6 +85,10 @@ def update(name: str | None = None) -> None:
             print(f"  {name}: skipped (not a symlink)")
             return
 
+    if not repo_names:
+        print("  Nothing to update.")
+        return
+
     updated = 0
     for repo_name in repo_names:
         repo_path = repos / repo_name
@@ -79,32 +97,26 @@ def update(name: str | None = None) -> None:
         if not url:
             continue
 
-        print(f"  Updating {repo_name} …")
-        shutil.rmtree(repo_path)
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp_path = Path(tmp) / repo_name
-            r = subprocess.run(
-                ["git", "clone", "--depth", "1", url, str(tmp_path)],
-                capture_output=True, text=True,
-            )
-            if r.returncode != 0:
-                print(f"    Failed: {r.stderr.strip()}")
-                continue
-            shutil.move(str(tmp_path), str(repo_path))
-
-        core.save_json(repo_path / ".source.json", {
-            **src, "updated_at": datetime.now().isoformat(),
-        })
-
-        # re-link skills from this repo
-        for skill_name, skill_path in core.scan_skill_dirs(repo_path):
-            link = core.skills_dir() / skill_name
-            if link.is_symlink():
-                link.unlink()
-                link.symlink_to(skill_path)
-
-        print("    ✓")
-        updated += 1
+        print(f"  Updating {repo_name} ({url}) …")
+        if _git_fetch(repo_path):
+            core.save_json(repo_path / ".source.json", {
+                **src, "updated_at": datetime.now().isoformat(),
+            })
+            # re-link skills from this repo
+            linked = []
+            for skill_name, skill_path in core.scan_skill_dirs(repo_path):
+                link = core.skills_dir() / skill_name
+                if link.is_symlink():
+                    link.unlink()
+                    link.symlink_to(skill_path)
+                    linked.append(skill_name)
+            if linked:
+                print(f"    ✓ {', '.join(linked)}")
+            else:
+                print("    ✓ (no installed skills to re-link)")
+            updated += 1
+        else:
+            print(f"    ✗ Fetch failed, skipping")
 
     print(f"\n✓ Updated {updated}/{len(repo_names)} repo(s)")
 
@@ -135,30 +147,54 @@ def list_installed() -> None:
 # ── internal ─────────────────────────────────────────────────────────────
 
 
-def _add_git(url: str, skill: str | None = None, list_only: bool = False) -> None:
+def _git_fetch(repo_path: Path) -> bool:
+    """Incrementally update a cached repo via git fetch. Returns True on success."""
+    r = subprocess.run(
+        ["git", "fetch", "--depth", "1", "origin"],
+        cwd=str(repo_path), capture_output=True, text=True,
+    )
+    if r.returncode != 0:
+        return False
+    r = subprocess.run(
+        ["git", "reset", "--hard", "origin/HEAD"],
+        cwd=str(repo_path), capture_output=True, text=True,
+    )
+    return r.returncode == 0
+
+
+def _add_git(url: str, skill: str | list[str] | None = None, list_only: bool = False) -> None:
     repo_name = url.rstrip("/").split("/")[-1].removesuffix(".git")
     repo_path = core.repos_dir() / repo_name
 
     core.repos_dir().mkdir(parents=True, exist_ok=True)
-    if repo_path.exists():
-        print(f"Updating cached repo '{repo_name}' …")
-        shutil.rmtree(repo_path)
+    cached = repo_path.exists() and (repo_path / ".source.json").exists()
 
-    print(f"Cloning {url} …")
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp_path = Path(tmp) / repo_name
-        r = subprocess.run(
-            ["git", "clone", "--depth", "1", url, str(tmp_path)],
-            capture_output=True, text=True,
-        )
-        if r.returncode != 0:
-            raise SystemExit(f"Clone failed:\n{r.stderr}")
-        shutil.move(str(tmp_path), str(repo_path))
+    if cached:
+        if list_only:
+            # preview: fetch latest then show
+            print(f"Fetching {repo_name} ({url}) …")
+            _git_fetch(repo_path)
+        else:
+            print(f"Using cached '{repo_name}'")
+    else:
+        if repo_path.exists():
+            shutil.rmtree(repo_path)
+        print(f"Cloning {url} …")
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp) / repo_name
+            r = subprocess.run(
+                ["git", "clone", "--depth", "1", url, str(tmp_path)],
+                capture_output=True, text=True,
+            )
+            if r.returncode != 0:
+                raise SystemExit(f"Clone failed:\n{r.stderr}")
+            shutil.move(str(tmp_path), str(repo_path))
 
     # scan for skill directories
     all_skills = core.scan_skill_dirs(repo_path)
     if not all_skills:
-        shutil.rmtree(repo_path)
+        if not cached:
+            shutil.rmtree(repo_path)
         raise SystemExit(f"No skills found in {url} (no SKILL.md detected).")
 
     # --list: just show and exit
@@ -168,7 +204,12 @@ def _add_git(url: str, skill: str | None = None, list_only: bool = False) -> Non
             for n, p in all_skills
         ]
         display.repo_preview(url, items)
-        shutil.rmtree(repo_path)
+        # save source so subsequent calls use cache
+        if not (repo_path / ".source.json").exists():
+            core.save_json(repo_path / ".source.json", {
+                "type": "git", "url": url,
+                "installed_at": datetime.now().isoformat(),
+            })
         return
 
     # record source
@@ -179,10 +220,12 @@ def _add_git(url: str, skill: str | None = None, list_only: bool = False) -> Non
 
     # apply --skill filter
     if skill:
-        filtered = [(n, p) for n, p in all_skills if n == skill]
+        names = [skill] if isinstance(skill, str) else skill
+        filtered = [(n, p) for n, p in all_skills if n in names]
         if not filtered:
             avail = ", ".join(n for n, _ in all_skills)
-            raise SystemExit(f"Skill '{skill}' not found. Available: {avail}")
+            missing = ", ".join(n for n in names if n not in {n for n, _ in all_skills})
+            raise SystemExit(f"Skill(s) not found: {missing}. Available: {avail}")
         all_skills = filtered
 
     # symlink each skill
@@ -224,14 +267,15 @@ def _add_local(path: str, skill: str | None = None) -> None:
 
 def _read_description(skill_file: Path) -> str:
     """Extract description from SKILL.md YAML frontmatter."""
+    import yaml
     try:
         text = skill_file.read_text()
         if text.startswith("---"):
             end = text.find("---", 3)
             if end != -1:
-                for line in text[3:end].splitlines():
-                    if line.startswith("description:"):
-                        return line.split(":", 1)[1].strip().strip("\"'")
+                meta = yaml.safe_load(text[3:end])
+                if isinstance(meta, dict):
+                    return str(meta.get("description", ""))
     except OSError:
         pass
     return ""

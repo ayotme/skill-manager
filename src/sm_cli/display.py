@@ -11,6 +11,15 @@ from rich.box import ROUNDED
 console = Console()
 
 
+def _first_sentence(text: str) -> str:
+    """Extract the first sentence from a description."""
+    import re
+    m = re.search(r'[.。](?:\s|$)', text)
+    if m:
+        return text[:m.end()].strip()
+    return text.strip()
+
+
 def skills_list(skills: list[dict]) -> None:
     """Display installed skills.
 
@@ -28,6 +37,7 @@ def skills_list(skills: list[dict]) -> None:
     for s in skills:
         src_tag = "[green]git[/green]" if s["source"] == "git" else "[yellow]local[/yellow]"
         desc = s.get("description") or "[dim]-[/dim]"
+        desc = _first_sentence(desc)
         table.add_row(s["name"], src_tag, desc, end_section=True)
 
     console.print(table)
@@ -60,32 +70,35 @@ def repo_preview(url: str, skills: list[dict]) -> None:
 
     Each item: {"name": str, "description": str}
     """
+    console.print(f"\n  {len(skills)} skill(s) in [dim]{url}[/dim]\n")
+
     table = Table(
-        title=f"[bold]{url}[/bold]",
         show_header=True,
         header_style="bold",
         box=ROUNDED,
         padding=(0, 1),
+        show_lines=True,
     )
     table.add_column("Skill", style="cyan bold", min_width=20)
     table.add_column("Description")
 
     for s in skills:
         desc = s.get("description", "[dim]—[/dim]")
+        desc = _first_sentence(desc)
         table.add_row(s["name"], desc)
 
-    console.print()
     console.print(table)
-    console.print(f"\n  [dim]{len(skills)} skill(s) found[/dim]")
 
 
-def status(home: str, agents: list[str], n_skills: int, n_profiles: int) -> None:
+def status(home: str, agents: list[str], skill_names: list[str], profile_names: list[str]) -> None:
+    skills_str = ", ".join(skill_names) if skill_names else "[dim]none[/dim]"
+    profiles_str = ", ".join(profile_names) if profile_names else "[dim]none[/dim]"
     console.print(
         Panel(
             f"[bold]Home:[/bold]       {home}\n"
             f"[bold]Agents:[/bold]      {', '.join(agents)}\n"
-            f"[bold]Skills:[/bold]      {n_skills}  [dim](use [bold]sm skills list[/bold] to see details)[/dim]\n"
-            f"[bold]Profiles:[/bold]    {n_profiles}  [dim](use [bold]sm list[/bold] to see details)[/dim]",
+            f"[bold]Skills:[/bold]      {skills_str}\n"
+            f"[bold]Profiles:[/bold]    {profiles_str}",
             title="[bold]Skill Manager[/bold]",
             border_style="dim",
         )

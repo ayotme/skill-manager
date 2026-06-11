@@ -1,75 +1,55 @@
-# sm — Agent Skill Manager
+# sm
 
 <p align="center">
-<b>One skill set, many agents.</b><br>
-<sup>Deploy the same skills to Claude Code · Codex · Pi · Cursor via symlinks.</sup>
+<h3>Skill Manager for AI Agents</h3>
+<h5>One skill set, many agents — Claude Code · Codex · Pi</h5>
 </p>
 
----
-
-```
-$ sm skills add anthropics/skills -l
-
-╭──────────────────────────────────────────────────────────────╮
-│ anthropics/skills                                            │
-├──────────────────────┬──────────────────────────────────────┤
-│ Skill                │ Description                          │
-├──────────────────────┼──────────────────────────────────────┤
-│ pdf                  │ Use this skill whenever the user    │
-│                      │ wants to do anything with PDF files │
-├──────────────────────┼──────────────────────────────────────┤
-│ docx                 │ Use this skill whenever the user    │
-│                      │ wants to create, read, or edit     │
-│                      │ Word documents                      │
-├──────────────────────┼──────────────────────────────────────┤
-│ ...                  │ 15 more                             │
-╰──────────────────────┴──────────────────────────────────────╯
-
-$ sm skills add anthropics/skills -s pdf docx
-✓ Installed 2 skill(s): pdf, docx
-
-$ sm add work --skills pdf,docx,deep-research --desc "Daily work"
-✓ Profile 'work' created.
-
-$ sm use work claude
-Deploying 'work' → claude (global) …
-  ✓ 3 skill(s) linked
-Launching claude …
-```
+<p align="center">
+<img src="demo.gif" width="600" />
+</p>
 
 ## Install
 
 ```bash
-uv tool install .
-# or from git
 uv tool install git+https://github.com/ayotme/skill-manager
 ```
 
 ## Commands
 
+**Skills**
+
+```bash
+sm add anthropics/skills -l              # preview available skills
+sm add anthropics/skills -s pdf,docx      # install specific skills
+sm ls                                     # list installed
+sm rm xlsx                                # remove one
+sm rm                                     # remove all
+sm update                                 # refresh from source
 ```
-sm status                            Show status
 
-sm skills add <owner/repo|url|path>  Install skill(s)
-  [-s pdf] [-l]
-sm skills list                       List installed skills
-sm skills remove <name>              Remove a skill
-sm skills update [name]              Update from source
+**Profiles**
 
-sm add <name> [--skills a,b]         Create a profile
-  [--desc text] [--force]
-sm list                              List profiles
-sm remove <name>                     Delete a profile
-sm edit <name>                       Edit in $EDITOR
-
-sm use <profile> <agent>             Deploy + launch
-sm use <profile> <agent> -p          Project-local
-sm unuse <profile> <agent>           Remove deployment
+```bash
+sm profile add work --skills pdf,docx,pptx,xlsx --desc "daily work"
+sm profile ls
+sm profile edit work
+sm profile rm work
 ```
+
+**Deploy**
+
+```bash
+sm use work claude                        # deploy + launch
+sm use work claude -p                     # project-local
+sm unuse work claude
+```
+
+Built-in agents: **claude** · **codex** · **pi** · **cursor**
 
 ## Custom Agents
 
-Create `~/.sm/agents.json`:
+Add agents in `~/.sm/agents.json`:
 
 ```json
 {
@@ -85,13 +65,13 @@ Create `~/.sm/agents.json`:
 
 ```
 ~/.sm/
-  repos/               Git clones (single source of truth)
-  skills/              Symlinks → repos/ or local paths
-  profiles/            Profile configs (JSON)
-  agents.json          Custom agents (optional)
+  repos/          ← git clones (cached, fast reuse)
+  skills/         ← symlinks → repos/ or local paths
+  profiles/       ← profile configs (JSON)
+  agents.json     ← custom agents (optional)
 ```
 
-`sm use` creates symlinks from `~/.sm/skills/` into the agent's skill directory. Switching profiles swaps the links. Zero magic, just symlinks.
+`sm use` symlinks skills into the agent's directory. Switching profiles swaps the links. Zero magic.
 
 ## License
 
